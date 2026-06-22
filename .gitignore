@@ -1,0 +1,18 @@
+# 생성물 / 업로드 / 캐시
+uploads/
+outputs/
+__pycache__/
+*.pyc
+
+# 로그
+*.log
+
+# 도면 (대용량, 저장소에 안 올림)
+*.dxf
+*.dwg
+
+# OS / 에디터
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

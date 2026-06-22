@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CONCOST CAD — 건축 물량산출 자동화</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3350;
+      --accent: #4f8ef7;
+      --accent-dim: #2a4a8a;
+      --green: #3ecf8e;
+      --red: #f76f6f;
+      --yellow: #f7c94f;
+      --text: #dde1f0;
+      --text-dim: #7a82a8;
+      --radius: 8px;
+      --font: 'Pretendard', 'Noto Sans KR', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    header .badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    header .file-indicator {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    header .file-indicator b { color: var(--accent); }
+
+    /* ── 단계 탭 바 ── */
+    .tabbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 13px 18px;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: color 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .tab:hover:not(:disabled):not(.active) { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab:disabled { color: #4a4f6e; cursor: not-allowed; }
+    .tab .tab-num {
+      width: 22px; height: 22px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--surface2);
+      color: var(--text-dim);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .tab.active .tab-num { background: var(--accent); color: #fff; }
+    .tab.done .tab-num { background: var(--green); color: #08160f; }
+    .tab .lock { font-size: 11px; opacity: 0.7; }
+    .tab .check { color: var(--green); font-size: 12px; }
+
+    /* ── 콘텐츠 영역 ── */
+    .content {
+      padding: 22px 28px 60px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .panel { display: none; flex-direction: column; gap: 18px; }
+    .panel.active { display: flex; }
+
+    /* ── 단계 헤더 ── */
+    .panel-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 2px;
+    }
+    .panel-head .title { font-size: 20px; font-weight: 700; }
+    .panel-head .desc { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+    .panel-head .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    /* ── 1단계 연동 배지 ── */
+    .link-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(62,207,142,0.1);
+      border: 1px solid rgba(62,207,142,0.35);
+      border-radius: var(--radius);
+      padding: 8px 14px;
+      font-size: 12.5px;
+      color: var(--green);
+    }
+    .link-badge.empty {
+      background: rgba(247,201,79,0.08);
+      border-color: rgba(247,201,79,0.3);
+      color: var(--yellow);
+    }
+    .link-badge b { color: var(--text); }
+
+    /* ── 업로드 ── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+      background: var(--surface);
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(79,142,247,0.05);
+    }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .upload-zone .icon { font-size: 30px; margin-bottom: 6px; }
+    .upload-zone .label { font-size: 13px; color: var(--text-dim); }
+    .upload-zone .hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .upload-zone .filename { margin-top: 8px; font-size: 12px; color: var(--accent); word-break: break-all; }
+
+    /* ── 버튼 ── */
+    .btn {
+      padding: 11px 22px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+    .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+    .flatten-opt {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12.5px;
+      color: var(--text-dim);
+      cursor: pointer;
+      user-select: none;
+    }
+    .flatten-opt input { accent-color: var(--accent); cursor: pointer; }
+
+    /* ── 카드 ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .card-header {
+      background: var(--surface2);
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-header .count { background: var(--accent-dim); color: var(--accent); padding: 1px 8px; border-radius: 20px; font-size: 11px; }
+    .card-body { padding: 16px; }
+
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+    .info-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+    .info-item .val { font-size: 21px; font-weight: 700; color: var(--accent); word-break: break-all; }
+    .info-item .key { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+    .layer-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .layer-col { display: flex; flex-direction: column; gap: 6px; }
+    .layer-col-title { font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .layer-col-title.keep { background: rgba(62,207,142,0.15); color: var(--green); }
+    .layer-col-title.delete { background: rgba(247,111,111,0.15); color: var(--red); }
+    .layer-col-title.unknown { background: rgba(247,201,79,0.15); color: var(--yellow); }
+    .layer-list { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+    .layer-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 12px; word-break: break-all; }
+    .layer-tag .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .keep .dot { background: var(--green); }
+    .delete .dot { background: var(--red); }
+    .unknown .dot { background: var(--yellow); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .mono { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; }
+
+    .bar-row { display: flex; flex-direction: column; gap: 8px; }
+    .bar-item { display: flex; flex-direction: column; gap: 4px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
+    .bar-label .val { color: var(--text); font-weight: 600; }
+    .bar-track { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.5s ease; }
+
+    .text-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow-y: auto; }
+    .text-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font-size: 12px; color: var(--text); }
+
+    .review-list { display: flex; flex-direction: column; gap: 8px; }
+    .review-item { background: rgba(247,201,79,0.07); border: 1px solid rgba(247,201,79,0.3); border-radius: 6px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; }
+    .review-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .review-msg { font-size: 12px; }
+    .review-layer { font-weight: 700; color: var(--yellow); }
+    .review-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .review-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface2); color: var(--text); font-size: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+    .review-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+    .review-btn.selected { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .dl-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; background: var(--surface2); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--accent); font-size: 13px; font-weight: 600; text-decoration: none; transition: background 0.15s, color 0.15s; }
+    .dl-btn:hover { background: var(--accent); color: #fff; }
+
+    .empty { text-align: center; padding: 70px 20px; color: var(--text-dim); }
+    .empty .icon { font-size: 42px; margin-bottom: 12px; }
+    .empty p { font-size: 13px; }
+
+    .status-line { font-size: 12.5px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+    .status-line.ok { color: var(--green); }
+    .status-line.error { color: var(--red); }
+
+    /* ── 진행률 모달 ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(8,10,16,0.72); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px 32px; width: 440px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .modal-stage { font-size: 13px; color: var(--text-dim); min-height: 20px; margin-bottom: 18px; }
+    .modal-bar-track { height: 10px; background: var(--surface2); border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+    .modal-bar-fill { height: 100%; width: 0%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), #6fa6ff); transition: width 0.3s ease; }
+    .modal-percent { text-align: right; font-size: 22px; font-weight: 700; color: var(--accent); margin-top: 10px; font-variant-numeric: tabular-nums; }
+
+    /* ── 완료 체크 애니메이션 ── */
+    #modalDone { text-align: center; }
+    .check-wrap { display: flex; justify-content: center; margin: 6px 0 14px; }
+    .check-svg { width: 88px; height: 88px; }
+    .check-circle {
+      fill: none;
+      stroke: var(--green);
+      stroke-width: 2.5;
+      stroke-dasharray: 151;
+      stroke-dashoffset: 151;
+    }
+    .check-mark {
+      fill: none;
+      stroke: var(--green);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+    }
+    #modalDone.animate .check-circle { animation: drawCircle 0.5s ease-out forwards; }
+    #modalDone.animate .check-mark { animation: drawMark 0.35s 0.42s ease-out forwards; }
+    #modalDone.animate .check-wrap { animation: popIn 0.4s ease-out; }
+    @keyframes drawCircle { to { stroke-dashoffset: 0; } }
+    @keyframes drawMark { to { stroke-dashoffset: 0; } }
+    @keyframes popIn { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+    .modal-done-title { font-size: 19px; font-weight: 700; color: var(--green); }
+    .modal-done-sub { font-size: 13px; color: var(--text-dim); margin-top: 6px; min-height: 18px; }
+
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--accent-dim); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CONCOST CAD</h1>
+  <span class="badge">건축 물량산출 자동화</span>
+  <div class="file-indicator" id="fileIndicator">파일 없음</div>
+</header>
+
+<!-- ── 단계 탭 바 ── -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab active" data-step="1">
+    <span class="tab-num">1</span><span>도면 분석</span><span class="check" id="check1" style="display:none">✓</span>
+  </button>
+  <button class="tab" data-step="2" disabled>
+    <span class="tab-num">2</span><span>도면 정리</span>
+    <span class="lock" id="lock2">🔒</span>
+    <span class="check" id="check2" style="display:none">✓</span>
+  </button>
+  <button class="tab" data-step="3">
+    <span class="tab-num">3</span><span>실 추출</span>
+    <span class="check" id="check3" style="display:none">✓</span>
+  </button>
+  <button class="tab" data-step="4" disabled>
+    <span class="tab-num">4</span><span>벽 바탕재</span><span class="lock">🔒</span>
+  </button>
+  <button class="tab" data-step="5" disabled>
+    <span class="tab-num">5</span><span>엑셀 산출</span><span class="lock">🔒</span>
+  </button>
+</nav>
+
+<div class="content">
+
+  <!-- ─────────── 1단계 ─────────── -->
+  <section class="panel active" data-step="1">
+    <div class="panel-head">
+      <div>
+        <div class="title">1단계 · DXF 분석</div>
+        <div class="desc">도면을 읽어 레이어·객체·면적·길이를 추출하고 검토 항목을 만듭니다.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="analyzeBtn" disabled>도면 분석 실행</button>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".dxf,.dwg">
+      <div class="icon">📐</div>
+      <div class="label">DWG / DXF 파일을 드래그하거나 클릭하여 업로드</div>
+      <div class="hint">.dwg는 ZWCAD로 자동 변환됩니다 (최대 100MB)</div>
+      <div class="filename" id="fileLabel"></div>
+    </div>
+
+    <div class="status-line" id="status1">대기 중 — DXF 파일을 선택하세요.</div>
+
+    <div id="analysisResult"></div>
+  </section>
+
+  <!-- ─────────── 2단계 ─────────── -->
+  <section class="panel" data-step="2">
+    <div class="panel-head">
+      <div>
+        <div class="title">2단계 · 도면 정리 / QTO 레이어</div>
+        <div class="desc">원본 블록 구조는 유지한 채 삭제 후보 레이어만 정리하고, 적산용 QTO 표준 레이어 골격을 만듭니다.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="cleanBtn" disabled>도면 정리 실행</button>
+      </div>
+    </div>
+
+    <div class="link-badge empty" id="linkBadge">⚠ 먼저 1단계 분석을 완료하세요.</div>
+
+    <div class="status-line" id="status2"></div>
+
+    <div id="cleanResult">
+      <div class="empty">
+        <div class="icon">🧹</div>
+        <p>위 <b>도면 정리 실행</b> 버튼을 누르면 결과가 여기에 표시됩니다.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── 3단계 · 실 추출 ─────────── -->
+  <section class="panel" data-step="3">
+    <div class="panel-head">
+      <div>
+        <div class="title">3단계 · 실 추출 (실명 · 면적 · 둘레)</div>
+        <div class="desc">내부 마감 작업 도면(실 경계 폴리라인)에서 실코드·실명·면적(A)·둘레(L)를 자동 추출합니다. FIN 내부 입력 변수와 직결됩니다.</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="extractBtn">실 추출 실행</button>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="roomUploadZone">
+      <input type="file" id="roomFileInput" accept=".dxf,.dwg">
+      <div class="icon">🏗️</div>
+      <div class="label">내부 마감 작업 도면(DWG/DXF)을 드래그하거나 클릭하여 업로드</div>
+      <div class="hint">사람이 실 경계 폴리라인을 그린 작업 도면 (예: 100-A- 평면도)</div>
+      <div class="filename" id="roomFileLabel"></div>
+    </div>
+
+    <div class="status-line" id="status3"></div>
+    <div id="roomResult">
+      <div class="empty"><div class="icon">📐</div><p>작업 도면을 올리고 <b>실 추출 실행</b>을 누르면 실별 면적·둘레 표가 나옵니다.</p></div>
+    </div>
+  </section>
+  <section class="panel" data-step="4">
+    <div class="panel-head"><div><div class="title">4단계 · 실 면적 산출</div><div class="desc">실 경계와 실명 매칭, 실별 면적 산출.</div></div></div>
+    <div class="empty"><div class="icon">🚧</div><p>준비 중입니다.</p></div>
+  </section>
+  <section class="panel" data-step="5">
+    <div class="panel-head"><div><div class="title">5단계 · 엑셀 산출서</div><div class="desc">산출식·수량 엑셀 출력.</div></div></div>
+    <div class="empty"><div class="icon">🚧</div><p>준비 중입니다.</p></div>
+  </section>
+
+</div>
+
+<!-- ── 진행률 / 완료 모달 ── -->
+<div class="modal-overlay" id="progressModal">
+  <div class="modal">
+    <!-- 진행 중 -->
+    <div id="modalProgress">
+      <div class="modal-title" id="modalTitle">처리 중</div>
+      <div class="modal-stage" id="modalStage">준비 중...</div>
+      <div class="modal-bar-track"><div class="modal-bar-fill" id="modalBarFill"></div></div>
+      <div class="modal-percent" id="modalPercent">0%</div>
+    </div>
+    <!-- 완료 -->
+    <div id="modalDone" style="display:none;">
+      <div class="check-wrap">
+        <svg class="check-svg" viewBox="0 0 52 52">
+          <circle class="check-circle" cx="26" cy="26" r="24"/>
+          <path class="check-mark" d="M14.1 27.5 l7.5 7.5 l16.5 -17"/>
+        </svg>
+      </div>
+      <div class="modal-done-title" id="modalDoneTitle">완료</div>
+      <div class="modal-done-sub" id="modalDoneSub"></div>
+      <button class="btn btn-primary" id="modalOkBtn" style="width:100%;margin-top:20px;">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = (location.protocol === 'http:' || location.protocol === 'https:') ? '' : 'http://127.0.0.1:8765';
+
+// ── 엘리먼트 ──
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const fileLabel = document.getElementById('fileLabel');
+const fileIndicator = document.getElementById('fileIndicator');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const cleanBtn = document.getElementById('cleanBtn');
+const status1 = document.getElementById('status1');
+const status2 = document.getElementById('status2');
+const analysisResult = document.getElementById('analysisResult');
+const cleanResult = document.getElementById('cleanResult');
+const linkBadge = document.getElementById('linkBadge');
+
+const progressModal = document.getElementById('progressModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalStage = document.getElementById('modalStage');
+const modalBarFill = document.getElementById('modalBarFill');
+const modalPercent = document.getElementById('modalPercent');
+
+// ── 상태 ──
+let selectedFile = null;
+let currentFileId = null;
+let currentFilename = null;
+let analysisData = null;
+let reviewChoices = {};
+let step1Done = false;
+let step2Done = false;
+
+// ─────────────────────────────────────────────
+// 탭 전환 / 잠금
+// ─────────────────────────────────────────────
+const tabs = Array.from(document.querySelectorAll('.tab'));
+const panels = Array.from(document.querySelectorAll('.panel'));
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.disabled) return;
+    switchTab(tab.dataset.step);
+  });
+});
+
+function switchTab(step) {
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.step === step));
+  panels.forEach(p => p.classList.toggle('active', p.dataset.step === step));
+}
+
+function setTabEnabled(step, enabled) {
+  const tab = tabs.find(t => t.dataset.step === String(step));
+  if (tab) tab.disabled = !enabled;
+}
+
+function setTabDone(step, done) {
+  const tab = tabs.find(t => t.dataset.step === String(step));
+  if (!tab) return;
+  tab.classList.toggle('done', done);
+  const check = document.getElementById('check' + step);
+  if (check) check.style.display = done ? '' : 'none';
+}
+
+// ─────────────────────────────────────────────
+// 진행률 모달 + 작업 폴링
+// ─────────────────────────────────────────────
+const modalProgress = document.getElementById('modalProgress');
+const modalDone = document.getElementById('modalDone');
+const modalDoneTitle = document.getElementById('modalDoneTitle');
+const modalDoneSub = document.getElementById('modalDoneSub');
+const modalOkBtn = document.getElementById('modalOkBtn');
+
+function showModal(title) {
+  modalTitle.textContent = title;
+  modalStage.textContent = '준비 중...';
+  modalBarFill.style.width = '0%';
+  modalPercent.textContent = '0%';
+  modalProgress.style.display = 'block';
+  modalDone.style.display = 'none';
+  modalDone.classList.remove('animate');
+  progressModal.classList.add('show');
+}
+function updateModal(percent, stage) {
+  const p = Math.max(0, Math.min(100, percent || 0));
+  modalBarFill.style.width = p + '%';
+  modalPercent.textContent = p + '%';
+  if (stage) modalStage.textContent = stage;
+}
+function hideModal() {
+  progressModal.classList.remove('show');
+  modalDone.classList.remove('animate');
+}
+
+/**
+ * 작업 완료 → 진행바를 완료 체크 애니메이션으로 전환.
+ * 사용자가 "확인"을 누를 때까지 대기(Promise).
+ */
+function showModalDone(title, sub) {
+  return new Promise(resolve => {
+    modalProgress.style.display = 'none';
+    modalDone.style.display = 'block';
+    modalDoneTitle.textContent = title || '완료';
+    modalDoneSub.textContent = sub || '';
+    // 애니메이션 재생 (클래스 토글로 리스타트)
+    modalDone.classList.remove('animate');
+    void modalDone.offsetWidth;
+    modalDone.classList.add('animate');
+    modalOkBtn.onclick = () => { hideModal(); resolve(); };
+  });
+}
+
+async function pollJob(jobId) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 400));
+    const res = await fetch(API_BASE + '/api/progress/' + jobId);
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    updateModal(j.percent, j.stage);
+    if (j.status === 'done') return j.result;
+    if (j.status === 'error') throw new Error(j.error || '작업 실패');
+  }
+}
+
+// ─────────────────────────────────────────────
+// 파일 선택
+// ─────────────────────────────────────────────
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) pickFile(fileInput.files[0]); });
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  const nm = (f ? f.name.toLowerCase() : '');
+  if (!f || !(nm.endsWith('.dxf') || nm.endsWith('.dwg'))) { setStatus(status1, 'error', 'DWG 또는 DXF 파일만 지원합니다.'); return; }
+  pickFile(f);
+});
+function pickFile(f) {
+  selectedFile = f;
+  fileLabel.textContent = f.name;
+  analyzeBtn.disabled = false;
+  setStatus(status1, '', `파일 선택됨: ${f.name}`);
+}
+
+function setStatus(el, type, msg) {
+  el.className = 'status-line ' + type;
+  const spin = type === 'running' ? '<div class="spinner"></div>' : '';
+  el.innerHTML = spin + '<span>' + msg + '</span>';
+}
+
+// ─────────────────────────────────────────────
+// 1단계: 분석
+// ─────────────────────────────────────────────
+analyzeBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  analyzeBtn.disabled = true;
+  cleanBtn.disabled = true;
+  setStatus(status1, 'running', '도면 분석 중...');
+  showModal('1단계 · 도면 분석 중');
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  try {
+    const res = await fetch(API_BASE + '/api/analyze', { method: 'POST', body: fd });
+    const start = await res.json();
+    if (start.error) throw new Error(start.error);
+    const data = await pollJob(start.job_id);
+    updateModal(100, '분석 완료');
+
+    analysisData = data;
+    currentFileId = data.file_id || null;
+    currentFilename = data.filename || selectedFile.name;
+    reviewChoices = {};
+    step1Done = true;
+    step2Done = false;
+
+    const s = data.summary || {};
+    await showModalDone('1단계 · 도면 분석 완료',
+      `레이어 ${fmt(s.total_layers)}개 · 객체 ${fmt(s.total_entities)}개 분석됨`);
+
+    renderAnalysis(data);
+    setStatus(status1, 'ok', '분석 완료 — 상단 2단계 탭이 활성화되었습니다.');
+
+    // 탭/연동 상태 갱신
+    setTabDone(1, true);
+    setTabEnabled(2, true);
+    document.getElementById('lock2').style.display = 'none';
+    setTabDone(2, false);
+    updateLinkBadge();
+    fileIndicator.innerHTML = `분석 완료: <b>${esc(currentFilename)}</b>`;
+    cleanBtn.disabled = false;
+    cleanResult.innerHTML = `<div class="empty"><div class="icon">🧹</div><p>위 <b>도면 정리 실행</b> 버튼을 누르면 결과가 여기에 표시됩니다.</p></div>`;
+  } catch (e) {
+    hideModal();
+    setStatus(status1, 'error', '오류: ' + e.message);
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+});
+
+// ─────────────────────────────────────────────
+// 2단계: 정리
+// ─────────────────────────────────────────────
+cleanBtn.addEventListener('click', async () => {
+  if (!currentFileId) { setStatus(status2, 'error', '먼저 1단계 분석을 실행하세요.'); return; }
+  cleanBtn.disabled = true; analyzeBtn.disabled = true;
+  setStatus(status2, 'running', '도면 정리 중...');
+  cleanResult.innerHTML = '';
+  showModal('2단계 · 도면 정리 중');
+
+  try {
+    const res = await fetch(API_BASE + '/api/clean', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: currentFileId, overrides: reviewChoices }),
+    });
+    const start = await res.json();
+    if (start.error) throw new Error(start.error);
+    const data = await pollJob(start.job_id);
+    updateModal(100, '정리 완료');
+    const c = data.clean || {};
+    await showModalDone('2단계 · 도면 정리 완료',
+      `정리 레이어 ${fmt((c.deleted_layers||[]).length)}개 · QTO 표준 레이어 생성됨`);
+    renderClean(data);
+    step2Done = true;
+    setTabDone(2, true);
+    // 3단계(실 추출) 잠금 해제
+    setTabEnabled(3, true);
+    const l3 = document.getElementById('lock3'); if (l3) l3.style.display = 'none';
+    setStatus(status2, 'ok', '도면 정리 완료 — 상단 3단계(실 추출) 탭이 활성화되었습니다.');
+  } catch (e) {
+    hideModal();
+    cleanResult.innerHTML = `<div class="status-line error"><span>오류: ${esc(e.message)}</span></div>`;
+    setStatus(status2, 'error', '정리 오류: ' + e.message);
+  } finally {
+    cleanBtn.disabled = false; analyzeBtn.disabled = false;
+  }
+});
+
+function updateLinkBadge() {
+  const n = Object.keys(reviewChoices).length;
+  if (currentFileId) {
+    linkBadge.className = 'link-badge';
+    linkBadge.innerHTML = `✓ 1단계 결과 연동됨 — <b>${esc(currentFilename)}</b> · 검토 선택 <b>${n}</b>건 반영`;
+  } else {
+    linkBadge.className = 'link-badge empty';
+    linkBadge.innerHTML = '⚠ 먼저 1단계 분석을 완료하세요.';
+  }
+}
+
+// ─────────────────────────────────────────────
+// 3단계: 실 추출
+// ─────────────────────────────────────────────
+const roomFileInput = document.getElementById('roomFileInput');
+const roomUploadZone = document.getElementById('roomUploadZone');
+const roomFileLabel = document.getElementById('roomFileLabel');
+const extractBtn = document.getElementById('extractBtn');
+const status3 = document.getElementById('status3');
+const roomResult = document.getElementById('roomResult');
+let roomFile = null;
+
+roomFileInput.addEventListener('change', () => { if (roomFileInput.files[0]) pickRoom(roomFileInput.files[0]); });
+roomUploadZone.addEventListener('dragover', e => { e.preventDefault(); roomUploadZone.classList.add('drag-over'); });
+roomUploadZone.addEventListener('dragleave', () => roomUploadZone.classList.remove('drag-over'));
+roomUploadZone.addEventListener('drop', e => {
+  e.preventDefault(); roomUploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  const nm = (f ? f.name.toLowerCase() : '');
+  if (!f || !(nm.endsWith('.dxf') || nm.endsWith('.dwg'))) { setStatus(status3, 'error', 'DWG 또는 DXF 파일만 지원합니다.'); return; }
+  pickRoom(f);
+});
+function pickRoom(f) {
+  roomFile = f;
+  roomFileLabel.textContent = f.name;
+  setStatus(status3, '', `파일 선택됨: ${f.name}`);
+}
+
+extractBtn.addEventListener('click', async () => {
+  if (!roomFile) { setStatus(status3, 'error', '먼저 작업 도면을 선택하세요.'); return; }
+  extractBtn.disabled = true;
+  setStatus(status3, 'running', '실 추출 중...');
+  roomResult.innerHTML = '';
+  showModal('3단계 · 실 추출 중');
+
+  const fd = new FormData();
+  fd.append('file', roomFile);
+  try {
+    const res = await fetch(API_BASE + '/api/extract_rooms', { method: 'POST', body: fd });
+    const start = await res.json();
+    if (start.error) throw new Error(start.error);
+    const data = await pollJob(start.job_id);
+    updateModal(100, '실 추출 완료');
+    await showModalDone('3단계 · 실 추출 완료',
+      `실 ${fmt(data.room_count)}개 · 식별 ${fmt(data.identified)}개 · 총면적 ${n2(data.total_area_m2)} m²`);
+    renderRooms(data);
+    setTabDone(3, true);
+    setStatus(status3, 'ok', '실 추출 완료');
+  } catch (e) {
+    hideModal();
+    roomResult.innerHTML = `<div class="status-line error"><span>오류: ${esc(e.message)}</span></div>`;
+    setStatus(status3, 'error', '실 추출 오류: ' + e.message);
+  } finally {
+    extractBtn.disabled = false;
+  }
+});
+
+function renderRooms(data) {
+  const rooms = data.rooms || [];
+  const rate = data.room_count ? Math.round(data.identified / data.room_count * 100) : 0;
+  const rows = rooms.map((r, i) => `
+    <tr>
+      <td class="num" style="color:var(--text-dim)">${i+1}</td>
+      <td class="mono">${esc(r.code)}</td>
+      <td>${esc(r.name) || '<span style="color:var(--text-dim)">(미식별)</span>'}</td>
+      <td class="num">${n2(r.area_m2)}</td>
+      <td class="num">${n2(r.perim_m)}</td>
+    </tr>`).join('');
+
+  roomResult.innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">실 추출 요약 — ${esc(data.filename||'')}</div>
+      <div class="card-body">
+        <div class="info-grid">
+          ${infoItem(fmt(data.room_count), '추출된 실')}
+          ${infoItem(fmt(data.identified), '실명 식별')}
+          ${infoItem(fmt(data.unidentified), '미식별(검토)')}
+          ${infoItem(rate + '%', '식별률')}
+          ${infoItem(n2(data.total_area_m2) + ' m²', '총 면적')}
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin-top:10px;">
+          사용 레이어: <span class="mono">${(data.layers_used||[]).map(esc).join(', ')}</span>
+        </p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">실별 산출 데이터 <span class="count">${rooms.length}실</span></div>
+      <div class="card-body" style="max-height:560px;overflow-y:auto;">
+        <table>
+          <thead><tr><th>#</th><th>실코드</th><th>실명</th><th style="text-align:right">면적 A (m²)</th><th style="text-align:right">둘레 L (m)</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+// 1단계 결과 렌더
+// ─────────────────────────────────────────────
+function renderAnalysis(data) {
+  const { summary, layer_classify, layer_area_summary, layer_length_summary, texts, review_items, filename } = data;
+  const tc = summary.type_counts || {};
+  analysisResult.innerHTML = '';
+  const add = el => analysisResult.appendChild(el);
+
+  add(card('도면 기본 정보', `
+    <div class="info-grid">
+      ${infoItem(esc(filename || '-'), '파일명')}
+      ${infoItem(fmt(summary.total_layers), '전체 레이어 수')}
+      ${infoItem(fmt(summary.total_entities), '전체 객체 수')}
+      ${infoItem(fmt(tc['LINE']||0), 'LINE')}
+      ${infoItem(fmt(tc['LWPOLYLINE']||0), 'LWPOLYLINE')}
+      ${infoItem(fmt((tc['TEXT']||0)+(tc['MTEXT']||0)), 'TEXT / MTEXT')}
+      ${infoItem(fmt(tc['HATCH']||0), 'HATCH')}
+      ${infoItem(fmt(tc['INSERT']||0), 'BLOCK (INSERT)')}
+      ${infoItem(fmt(tc['DIMENSION']||0), 'DIMENSION')}
+      ${infoItem(n2(summary.total_closed_area_m2)+' m²', '닫힌 폴리라인 면적')}
+      ${infoItem(n2(summary.total_line_length_m)+' m', 'LINE 총길이')}
+      ${infoItem(n2(summary.total_polyline_length_m)+' m', '폴리라인 총길이')}
+    </div>`));
+
+  const lc = layer_classify || {};
+  add(card('레이어 분류', `
+    <div class="layer-grid">
+      <div class="layer-col">
+        <div class="layer-col-title keep">유지 후보 (${(lc.keep||[]).length})</div>
+        <div class="layer-list">${(lc.keep||[]).map(n=>tag('keep',n)).join('')||none()}</div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-col-title delete">삭제 후보 (${(lc.delete||[]).length})</div>
+        <div class="layer-list">${(lc.delete||[]).map(n=>tag('delete',n)).join('')||none()}</div>
+      </div>
+      <div class="layer-col">
+        <div class="layer-col-title unknown">판단 불가 (${(lc.unknown||[]).length})</div>
+        <div class="layer-list">${(lc.unknown_used||[]).map(n=>tag('unknown',n)).join('')||none()}</div>
+      </div>
+    </div>`));
+
+  const rows = Object.entries(tc).sort((a,b)=>b[1]-a[1]).map(([t,c])=>`<tr><td class="mono">${esc(t)}</td><td class="num">${fmt(c)}</td></tr>`).join('');
+  add(card('객체 타입별 현황', `<table><thead><tr><th>타입</th><th style="text-align:right">개수</th></tr></thead><tbody>${rows}</tbody></table>`));
+
+  if (Object.keys(layer_area_summary||{}).length) add(card('레이어별 닫힌 폴리라인 면적 (상위 15)', barChart(layer_area_summary, 'm²', 'var(--accent)')));
+  if (Object.keys(layer_length_summary||{}).length) add(card('레이어별 선/폴리라인 길이 (상위 15)', barChart(layer_length_summary, 'm', 'var(--green)')));
+
+  if ((texts||[]).length) add(card(`문자 목록 (${texts.length}개${texts.length===200?' · 상위 200':''})`, `<div class="text-list">${texts.map(t=>`<div class="text-chip">${esc(t.content)}</div>`).join('')}</div>`));
+
+  if ((review_items||[]).length) {
+    const items = review_items.map(r=>`
+      <div class="review-item">
+        <div class="review-icon">⚠️</div>
+        <div class="review-msg">
+          <span class="review-layer">${esc(r.layer)}</span><br>${esc(r.message)}
+          <div class="review-actions">
+            <button class="review-btn" onclick="selectReview(this,'${esc(r.layer)}','유지')">유지</button>
+            <button class="review-btn" onclick="selectReview(this,'${esc(r.layer)}','삭제')">삭제</button>
+            <button class="review-btn" onclick="selectReview(this,'${esc(r.layer)}','나중에')">나중에</button>
+          </div>
+        </div>
+      </div>`).join('');
+    add(card(`검토 필요 항목 (${review_items.length}개) — 선택은 2단계 정리에 반영됩니다`, `<div class="review-list">${items}</div>`));
+  }
+}
+
+function selectReview(btn, layer, choice) {
+  btn.parentElement.querySelectorAll('.review-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  reviewChoices[layer] = choice;
+  updateLinkBadge();
+}
+
+// ─────────────────────────────────────────────
+// 2단계 결과 렌더
+// ─────────────────────────────────────────────
+function renderClean(data) {
+  const c = data.clean||{}, q = data.qto||{}, dl = data.downloads||{};
+  const created = q.created_qto_layers||[];
+
+  const qtoTags = created.map(l=>`<div class="layer-tag keep"><div class="dot"></div><span class="mono">${esc(l)}</span></div>`).join('')
+    || '<span style="color:var(--text-dim);font-size:12px;">이미 생성됨</span>';
+
+  cleanResult.innerHTML = `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">2단계 · 정리 결과 (원본 블록 구조 유지)</div>
+      <div class="card-body">
+        <div class="info-grid" style="margin-bottom:14px;">
+          ${infoItem(fmt((c.deleted_layers||[]).length), '정리 대상 레이어')}
+          ${infoItem(fmt(c.turned_off_layers||0), 'OFF 처리 레이어')}
+          ${infoItem(fmt(c.removed_entities||0), '제거된 최상위 객체')}
+          ${infoItem(fmt(c.kept_entities||0), '유지된 객체')}
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);">
+          삭제 후보 레이어(조경·가구·사람 등)는 객체 제거 + 레이어 OFF로 숨겼습니다.
+          블록 구조와 나머지 도형은 원본 그대로 보존됩니다.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">QTO 표준 레이어 골격 <span class="count">${created.length}종 생성</span></div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
+          ${esc(q.note||'적산용 표준 레이어 골격을 만들었습니다.')}
+        </p>
+        <div class="layer-list" style="flex-flow:row wrap;max-height:none;">${qtoTags}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a class="dl-btn" href="${API_BASE+dl.cleaned}" download>⬇ cleaned.dxf (정리된 도면)</a>
+      <a class="dl-btn" href="${API_BASE+dl.qto}" download>⬇ qto_layered.dxf (QTO 골격)</a>
+      <a class="dl-btn" href="${API_BASE+dl.table}" download>⬇ 레이어 분류표 (CSV)</a>
+    </div>`;
+}
+
+// ── 유틸 ──
+function card(title, body, count) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `<div class="card-header">${esc(title)}${count!=null?`<span class="count">${count}</span>`:''}</div><div class="card-body">${body}</div>`;
+  return el;
+}
+function infoItem(val, key) { return `<div class="info-item"><div class="val">${val}</div><div class="key">${esc(key)}</div></div>`; }
+function tag(cls, n) { return `<div class="layer-tag ${cls}"><div class="dot"></div><span class="mono">${esc(n)}</span></div>`; }
+function none() { return '<span style="color:var(--text-dim);font-size:12px;">없음</span>'; }
+function barChart(obj, unit, color) {
+  const entries = Object.entries(obj).slice(0,15);
+  const max = entries[0][1] || 1;
+  return `<div class="bar-row">${entries.map(([l,v])=>`
+    <div class="bar-item">
+      <div class="bar-label"><span class="mono">${esc(l)}</span><span class="val">${n2(v)} ${unit}</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(v/max*100).toFixed(1)}%;background:${color};"></div></div>
+    </div>`).join('')}</div>`;
+}
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;'); }
+function fmt(n) { return Number(n||0).toLocaleString('ko-KR'); }
+function n2(n) { return Number(n||0).toFixed(2); }
+</script>
+
+</body>
+</html>
